@@ -6,7 +6,8 @@ import pickle as pkl
 from Dataset import Dataset
 from model import *
 import time
-
+import matplotlib.pyplot as plt
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 gpus = tf.config.experimental.list_physical_devices('GPU')
 for g in gpus:
     tf.config.experimental.set_memory_growth(g, True)
@@ -26,7 +27,7 @@ parser.add_argument('--model_name', type=str, default='FC2', help='Should contai
 parser.add_argument('--lr', type=float, default=0.0005, help='Learning rate')
 parser.add_argument('--batch_size', type=int, default=350, help='Batch size')
 parser.add_argument('--epochs', type=int, default=25, help='Epochs. 0 -skip training')
-parser.add_argument('--testing', type=strtobool, default=False, help='Execute testing.')
+parser.add_argument('--testing', type=strtobool, default=True, help='Execute testing.')
 parser.add_argument('--load', type=str, default='False', help='Load before training. (True|False|custom_name.h5)')
 parser.add_argument('--save', type=strtobool, default=False, help='Store after training.')
 # Robustness parameters:
@@ -125,9 +126,45 @@ if 'SNN' in args.model_type:
 
 if args.testing:
     logging.info("#### Initial test set accuracy testing ####")
-    test_acc = model.evaluate(data.x_test, data.y_test, batch_size=args.batch_size)
-    logging.info("Initial testing accuracy is {}.".format(test_acc))
+    CIFAR10_NAMES = ['airplane', 'automobile', 'bird', 'cat', 'deer',
+                     'dog', 'frog', 'horse', 'ship', 'truck']
 
+    # ---- 1. quick Keras evaluate ----
+    test_acc = model.evaluate(data.x_test, data.y_test,
+                              batch_size=args.batch_size, verbose=0)
+    logging.info("Keras evaluate accuracy: %.4f", test_acc[1])
+
+    # ---- 2. manual loop for plots ----
+    N= 10                                   # << change here if you want more/less
+    dataset = tf.data.Dataset.from_tensor_slices((data.x_test[:N], data.y_test[:N])) \
+                            .batch(args.batch_size)
+
+    preds, gts = [], []
+    for xb, yb in dataset:
+        out = model(xb, training=False)
+        logits = out[0] if isinstance(out, list) else out
+        if logits.ndim == 1:                 # batch-size 1 safety
+            logits = tf.expand_dims(logits, 0)
+        preds.append(tf.argmax(logits, axis=-1).numpy())
+        gts.append(tf.argmax(yb, axis=-1).numpy())
+
+    preds = np.concatenate(preds)
+    gts   = np.concatenate(gts)
+    acc   = accuracy_score(gts, preds)
+    logging.info("Manual accuracy: %.4f", acc)
+
+    # ---- 3. plots ----
+    plt.figure(figsize=(10, 4))
+    for i in range(9):
+        plt.subplot(3, 3, i+1)
+        img = (data.x_test[i] * 255).astype(np.uint8)
+        plt.imshow(img)
+        plt.title(f"T: {CIFAR10_NAMES[gts[i]]}\nP: {CIFAR10_NAMES[preds[i]]}", fontsize=9)
+        plt.axis('off')
+    plt.suptitle(f"ReLU-converted  –  accuracy {acc:.3f}")
+    plt.tight_layout()
+    plt.savefig("sample_predictions_relu.png", dpi=150)
+    plt.show()
 logging.info("#### Training ####")
 history=model.fit(
     data.x_train, data.y_train,
