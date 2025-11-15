@@ -219,6 +219,24 @@ def create_vgg_model_ReLU(layers2D, kernel_size, layers1D, data, BN, dropout=0, 
     return model
 
 
+def wrap_for_training(base_model, optimizer):
+    """
+    base_model: ModelTmax  (inputs -> [logits, min_ti])
+    returns: plain keras model  (inputs -> logits)
+    """
+    logits = base_model.outputs[0]          # tensor we need for loss
+    min_ti = base_model.outputs[1]          # tensor we only want to log
+
+    # plain model – loss sees only logits
+    train_model = tf.keras.Model(base_model.inputs, logits)
+    train_model.add_metric(tf.reduce_mean(min_ti), name='min_ti')
+    train_model.compile(
+        optimizer=optimizer,
+        loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True),
+        metrics=['accuracy'])
+    return train_model
+
+
 def create_vgg_model_SNN(layers2D, kernel_size, layers1D, data, optimizer, X_n=1000,
                          robustness_params={}, kernel_regularizer=None, kernel_initializer='glorot_uniform'):
     """
@@ -259,9 +277,21 @@ def create_vgg_model_SNN(layers2D, kernel_size, layers1D, data, optimizer, X_n=1
     outputs =SpikingDense(data.num_of_classes, 'dense_'+str(i_dense), outputLayer=True,
                           kernel_regularizer=kernel_regularizer,
                           robustness_params=robustness_params)(ti)
-    model = ModelTmax (inputs=tj, outputs=[outputs, min_ti])  
-    model.compile(metrics=['accuracy'], loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True), optimizer=optimizer, run_eagerly=True)
-    return model
+    # model = ModelTmax (inputs=tj, outputs=[outputs, min_ti])  
+    # model.compile(metrics=['accuracy'], loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True), optimizer=optimizer, run_eagerly=True)
+    # NEW  –  return *only* logits to the loss, keep min_ti for internal use
+# 1. base model that produces spike times (internal use)
+    base_model = ModelTmax(inputs=tj, outputs=[outputs, min_ti])
+
+    # 2. training model – outputs ONLY logits, no list
+    train_model = tf.keras.Model(inputs=tj, outputs=outputs)
+    train_model.add_metric(tf.reduce_mean(min_ti), name='min_ti')
+    train_model.compile(
+        optimizer=optimizer,
+        loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True),
+        metrics=['accuracy'])
+    return train_model
+
 
 
 def create_fc_model_ReLU(layers = 2, optimizer='adam', N_hid=340, N_in=784, N_out=10):
