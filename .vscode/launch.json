@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Run VGG Example",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/main.py",
+      "python": "I:/SNN/newvenv/Scripts/python.exe",
+      "args": ["--model_type=SNN", "--lr=1e-6", "--model_name=VGG_BN_example", "--data_name=CIFAR10", "--load=True", "--epochs=1"],
+      "console": "integratedTerminal"
+    }
+  ]
+}
