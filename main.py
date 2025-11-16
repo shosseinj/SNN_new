@@ -27,7 +27,7 @@ parser.add_argument('--model_name', type=str, default='FC2', help='Should contai
 parser.add_argument('--lr', type=float, default=0.0005, help='Learning rate')
 parser.add_argument('--batch_size', type=int, default=350, help='Batch size')
 parser.add_argument('--epochs', type=int, default=25, help='Epochs. 0 -skip training')
-parser.add_argument('--testing', type=strtobool, default=True, help='Execute testing.')
+parser.add_argument('--testing', type=strtobool, default=False, help='Execute testing.')
 parser.add_argument('--load', type=str, default='False', help='Load before training. (True|False|custom_name.h5)')
 parser.add_argument('--save', type=strtobool, default=False, help='Store after training.')
 # Robustness parameters:
@@ -89,9 +89,9 @@ if 'VGG' in args.model_name:
     if 'SNN' in args.model_type:
         model = create_vgg_model_SNN(layers2D, kernel_size, layers1D, data, optimizer, robustness_params=robustness_params,
                                      kernel_regularizer=regularizer, kernel_initializer=initializer)
-    if 'ReLU' in args.model_type:
-        model = create_vgg_model_ReLU (layers2D, kernel_size, layers1D, data, BN=BN, optimizer=optimizer,
-                                       kernel_regularizer=regularizer, kernel_initializer=initializer)
+    # if 'ReLU' in args.model_type:
+    #     model = create_vgg_model_ReLU (layers2D, kernel_size, layers1D, data, BN=BN, optimizer=optimizer,
+    #                                    kernel_regularizer=regularizer, kernel_initializer=initializer)
 if model is None:
     print('Please specify a valid model. Exiting.')
     exit(1)
@@ -100,12 +100,12 @@ model.last_dense = list(filter(lambda x : 'dense' in x.name, model.layers))[-1]
 
 if args.load != 'False':
     logging.info("#### Loading weights ####")
-    if 'ReLU' in args.model_type:
-        # Load weights
-        if args.load == 'True':  # automatic name
-            model.load_weights(args.logging_dir + args.model_name + '_weights.h5', by_name=True)
-        else:  # custom name
-            model.load_weights(args.logging_dir + args.load, by_name=True)
+    # if 'ReLU' in args.model_type:
+    #     # Load weights
+    #     if args.load == 'True':  # automatic name
+    #         model.load_weights(args.logging_dir + args.model_name + '_weights.h5', by_name=True)
+    #     else:  # custom name
+    #         model.load_weights(args.logging_dir + args.load, by_name=True)
     if 'SNN' in args.model_type:
         # Load X ranges
         if os.path.exists(args.logging_dir + args.model_name + '_X_n.pkl'):
@@ -116,6 +116,7 @@ if args.load != 'False':
         logging.info("#### Loading Weights... ####")
         model.load_weights(args.logging_dir + args.model_name + '_preprocessed.h5', by_name=True)
 
+
 if 'SNN' in args.model_type:
     logging.info("#### Setting SNN intervals ####")
     # Set parameters of SNN network: t_min_prev, t_min, t_max.
@@ -123,7 +124,6 @@ if 'SNN' in args.model_type:
     for layer in model.layers:
         if 'conv' in layer.name or 'dense' in layer.name:
             t_min, t_max = layer.set_params(t_min, t_max)
-
 if args.testing:
     logging.info("#### Initial test set accuracy testing ####")
     CIFAR10_NAMES = ['airplane', 'automobile', 'bird', 'cat', 'deer',

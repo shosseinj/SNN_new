@@ -26,14 +26,22 @@ parser = argparse.ArgumentParser(description="Evaluate ReLU-converted SNN weight
 parser.add_argument("--data_name",   type=str, default="CIFAR10")
 parser.add_argument("--model_name",  type=str, default="VGG_BN_example")
 parser.add_argument("--logging_dir", type=str, default="./logs/")
-parser.add_argument("--batch_size",  type=int, default=256)
+
 parser.add_argument("--num_samples", type=int, default=0,
                     help="0 = whole test set, else first N")
+parser.add_argument('--batch_size', type=int, default=10, help='Batch size')
+parser.add_argument('--model_type', type=str, default='SNN', help='(SNN|ReLU)')
+parser.add_argument('--noise', type=float, default=0.0, help='Noise std.dev.')
+parser.add_argument('--time_bits', type=int, default=0, help='number of bits to represent time. 0 -disabled')
+parser.add_argument('--weight_bits', type=int, default=0, help='number of bits to represent weights. 0 -disabled')
+parser.add_argument('--w_min', type=float, default=-1.0, help='w_min to use if weight_bits is enabled')
+parser.add_argument('--w_max', type=float, default=1.0, help='w_max to use if weight_bits is enabled')
+parser.add_argument('--latency_quantiles', type=float, default=0.0, help='Number of quantiles to take into account when calculating t_max. 0 -disabled')
+parser.add_argument('--mode', type=str, default='', help='Ignore: A hack to address a bug in argsparse during debugging')
 args = parser.parse_args()
 
 args.model_name = args.data_name + "-" + args.model_name
-CIFAR10_NAMES = ['airplane', 'automobile', 'bird', 'cat', 'deer',
-                 'dog', 'frog', 'horse', 'ship', 'truck']
+CIFAR10_NAMES = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
 
 # --------------------------------------------------
 def main():
@@ -45,29 +53,44 @@ def main():
     optimizer = get_optimizer(1e-6)          # not used for inference
     xn_path   = os.path.join(args.logging_dir, args.model_name + "_X_n.pkl")
     X_n       = pkl.load(open(xn_path, 'rb')) if os.path.exists(xn_path) else 1000
-    robustness_params = {'noise': 0, 'time_bits': 0, 'weight_bits': 0,
-                         'w_min': -1.0, 'w_max': 1.0, 'latency_quantiles': 0.0}
+    robustness_params={
+    'noise':args.noise,
+    'time_bits':args.time_bits,
+    'weight_bits': args.weight_bits,
+    'w_min': args.w_min,
+    'w_max': args.w_max,
+    'latency_quantiles':args.latency_quantiles
+}
 
-    model = create_vgg_model_SNN(
-        [64, 64, 'pool', 128, 128, 'pool', 256, 256, 256, 'pool',
-         512, 512, 512, 'pool', 512, 512, 512, 'pool'],
-        (3, 3), [512], data, optimizer, X_n=X_n,
-        robustness_params=robustness_params)
+
+    layers2D = [64, 64, 'pool', 128, 128, 'pool', 256, 256, 256, 'pool', 512, 512, 512, 'pool', 512, 512, 512, 'pool']
+    layers1D=[512]
+    kernel_size=(3,3)
+    regularizer = None
+    initializer = 'glorot_uniform'
+    model = create_vgg_model_SNN(layers2D, kernel_size, layers1D, data, optimizer, robustness_params=robustness_params,
+                                     kernel_regularizer=regularizer, kernel_initializer=initializer)
 
     # ---------- load the ReLU-converted weights ----------
-    weights_file = os.path.join(args.logging_dir, args.model_name + "_preprocessed.h5")
-    if not os.path.exists(weights_file):
-        logging.error("Converted weights not found: %s", weights_file)
-        sys.exit(1)
 
-    model.load_weights(weights_file, by_name=True)
-    logging.info("Loaded ReLU-converted weights from %s", weights_file)
+    X_n=pkl.load(open(args.logging_dir + args.model_name + '_X_n.pkl', 'rb'))
+    model.load_weights(args.logging_dir + args.model_name + '_preprocessed.h5', by_name=True)
+    logging.info("Loaded ReLU-converted weights from %s"+ args.logging_dir + args.model_name + '_preprocessed.h5')
+    if 'SNN' in args.model_type:
+        logging.info("#### Setting SNN intervals ####")
+        # Set parameters of SNN network: t_min_prev, t_min, t_max.
+        t_min, t_max = 0, 1  # for the input layer
+        for layer in model.layers:
+            if 'conv' in layer.name or 'dense' in layer.name:
+                t_min, t_max = layer.set_params(t_min, t_max)
 
     # ---------- evaluate ----------
     num = args.num_samples if args.num_samples else len(data.y_test)
     x, y = data.x_test[:num], data.y_test[:num]
 
-    dataset = tf.data.Dataset.from_tensor_slices((x, y)).batch(args.batch_size)
+    N= 150                                   # << change here if you want more/less
+    dataset = tf.data.Dataset.from_tensor_slices((data.x_test[:N], data.y_test[:N])) \
+                            .batch(args.batch_size)
     preds, gts = [], []
     for xb, yb in dataset:
         out = model(xb, training=False)
