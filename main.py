@@ -5,13 +5,248 @@ import argparse
 import pickle as pkl
 from Dataset import Dataset
 from model import *
+import datetime
+from tensorflow.keras.callbacks import Callback, TensorBoard, ModelCheckpoint
 import time
 import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 gpus = tf.config.experimental.list_physical_devices('GPU')
 for g in gpus:
     tf.config.experimental.set_memory_growth(g, True)
+import numpy as np
+import sklearn.metrics
+import io
+import matplotlib.pyplot as plt
+import tensorflow as tf
+from datetime import datetime
 
+
+import io
+import tensorflow as tf
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score
+
+
+class FullSpikeEvaluationCallback(tf.keras.callbacks.Callback):
+    """
+    Logs for TensorBoard:
+      – spike histograms
+      – spike-rate scalars
+      – test loss & accuracy
+      – total spike count
+      – precision / recall / F1
+      – confusion matrix image
+    """
+
+    def __init__(self, log_dir, x_sample, data_x_test, data_y_test,
+                 batch_size=128, run_every_n_epochs=1):
+        super().__init__()
+        self.file_writer = tf.summary.create_file_writer(log_dir)
+        self.x_sample = x_sample
+        self.x_test = data_x_test
+        self.y_test = data_y_test
+        self.batch_size = batch_size
+        self.run_every_n_epochs = run_every_n_epochs
+
+    # ---------- helpers ----------
+    def _spike_count(self, tensor):
+        return tf.reduce_sum(tf.cast(tensor > 0, tf.float32)).numpy()
+
+    def _plot_to_image(self, fig):
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png")
+        buf.seek(0)
+        img = tf.image.decode_png(buf.getvalue(), channels=4)
+        plt.close(fig)
+        return tf.expand_dims(img, 0)
+
+    # ---------- main hook ----------
+    def on_epoch_end(self, epoch, logs=None):
+        if (epoch + 1) % self.run_every_n_epochs != 0:
+            return
+
+        ti = self.x_sample
+        total_spikes = 0
+
+        with self.file_writer.as_default():
+
+            # ------------------------------------------
+            # TRUE FORWARD PASS – IN CORRECT ORDER
+            # ------------------------------------------
+            for layer in self.model.layers:
+                try:
+                    ti = layer(ti)
+                except Exception:
+                    continue
+
+                if isinstance(layer, (SpikingConv2D, SpikingDense)):
+                    tf.summary.histogram(f"{layer.name}_spikes", ti, step=epoch)
+                    tf.summary.scalar(f"{layer.name}_spike_rate",
+                                      tf.reduce_mean(ti), step=epoch)
+                    total_spikes += self._spike_count(ti)
+
+            tf.summary.scalar("total_spikes", total_spikes, step=epoch)
+
+            # ------------------------------------------
+            # EVALUATE MODEL
+            # ------------------------------------------
+            eval_results = self.model.evaluate(
+                self.x_test,
+                self.y_test,
+                batch_size=self.batch_size,
+                verbose=0,
+                return_dict=True
+            )
+
+            test_loss = float(eval_results['loss'])
+            test_acc = float(eval_results['accuracy'])
+
+            tf.summary.scalar("test_loss", test_loss, step=epoch)
+            tf.summary.scalar("test_accuracy", test_acc, step=epoch)
+
+            # ------------------------------------------
+            # PREDICTIONS
+            # ------------------------------------------
+            y_pred_raw = self.model.predict(self.x_test, batch_size=self.batch_size, verbose=0)
+            y_pred = tf.argmax(y_pred_raw, axis=1).numpy()
+            y_true = tf.argmax(self.y_test, axis=1).numpy()
+
+            # ------------------------------------------
+            # PRECISION / RECALL / F1
+            # ------------------------------------------
+            prec = precision_score(y_true, y_pred, average="macro")
+            rec = recall_score(y_true, y_pred, average="macro")
+            f1 = f1_score(y_true, y_pred, average="macro")
+
+            tf.summary.scalar("precision_macro", prec, step=epoch)
+            tf.summary.scalar("recall_macro", rec, step=epoch)
+            tf.summary.scalar("f1_macro", f1, step=epoch)
+
+            # ------------------------------------------
+            # CONFUSION MATRIX IMAGE
+            # ------------------------------------------
+            cm = confusion_matrix(y_true, y_pred)
+
+            fig = plt.figure(figsize=(6, 5))
+            sns.heatmap(cm, annot=True, fmt="d", cmap="Blues")
+            plt.title("Confusion Matrix")
+            plt.xlabel("Predicted")
+            plt.ylabel("True")
+
+            cm_img = self._plot_to_image(fig)
+            tf.summary.image("confusion_matrix", cm_img, step=epoch)
+
+            self.file_writer.flush()
+
+
+
+        # if (epoch + 1) % self.run_every_n_epochs != 0:
+        #     return
+
+        # # 1.  TEST METRICS
+        # eval_results = self.model.evaluate(
+        #     self.x_test, self.y_test,
+        #     batch_size=self.batch_size,
+        #     verbose=0,
+        #     return_dict=True)
+        # test_loss = float(eval_results['loss'])
+        # test_acc  = float(eval_results['accuracy'])
+        # min_ti    = float(eval_results['min_ti'])
+
+        # y_prob = self.model.predict(self.x_test, batch_size=self.batch_size)
+        # y_pred = np.argmax(y_prob, axis=1)
+        # y_true = np.argmax(self.y_test, axis=1)
+
+        # prec, rec, f1, supp = sklearn.metrics.precision_recall_fscore_support(
+        #     y_true, y_pred, average=None, zero_division=0)
+        # conf = sklearn.metrics.confusion_matrix(y_true, y_pred)
+
+        # # 2.  SPIKE HISTOGRAMS + RATES + TOTAL COUNT
+        # total_spikes = 0
+        # ti = self.x_sample
+        # with self.file_writer.as_default():
+        #     # ---- conv blocks (found at run-time) ----
+        #     # for layer in [L for L in self.model.layers if isinstance(L, SpikingConv2D)]:
+        #     #     ti = layer(ti)
+        #     #     tf.summary.histogram(f"{layer.name}_spikes", ti, step=epoch)
+        #     #     tf.summary.scalar(f"{layer.name}_spike_rate", tf.reduce_mean(ti), step=epoch)
+        #     #     total_spikes += self._spike_count(ti)
+
+        #     # ---- flatten ----
+        #     # flatten_layer = next(L for L in self.model.layers if isinstance(L, tf.keras.layers.Flatten))
+        #     # ti = flatten_layer(ti)
+
+        #     # ---- dense blocks (found at run-time) ----
+        #     # for layer in [L for L in self.model.layers if isinstance(L, SpikingDense)]:
+        #     #     ti = layer(ti)
+        #     #     tf.summary.histogram(f"{layer.name}_spikes", ti, step=epoch)
+        #     #     tf.summary.scalar(f"{layer.name}_spike_rate", tf.reduce_mean(ti), step=epoch)
+        #     #     total_spikes += self._spike_count(ti)
+
+        #     # ---- output layer (last SpikingDense) ----
+        #     output_layer = [L for L in self.model.layers if isinstance(L, SpikingDense)][-1]
+        #     out = output_layer(ti)
+        #     tf.summary.histogram(f"{output_layer.name}_spikes", out, step=epoch)
+        #     total_spikes += self._spike_count(out)
+
+        #     # 3.  SCALAR METRICS
+        #     tf.summary.scalar("test_accuracy", test_acc, step=epoch)
+        #     tf.summary.scalar("test_loss", test_loss, step=epoch)
+        #     # tf.summary.scalar("total_spikes", total_spikes, step=epoch)
+        #     tf.summary.scalar("test_min_ti", min_ti, step=epoch)
+
+        #     # per-class F1
+        #     for idx, score in enumerate(f1):
+        #         tf.summary.scalar(f"f1_class{idx}", score, step=epoch)
+
+        #     # 4.  CONFUSION-MATRIX IMAGE
+        #     fig = plt.figure(figsize=(4, 3))
+        #     sklearn.metrics.ConfusionMatrixDisplay(
+        #         conf, display_labels=[str(i) for i in range(conf.shape[0])]
+        #     ).plot(cmap='Blues', ax=plt.gca(), values_format='d')
+        #     plt.tight_layout()
+        #     tf.summary.image("confusion_matrix", self._plot_to_image(fig), step=epoch)
+
+class FullSpikeEvaluationCallback2(tf.keras.callbacks.Callback):
+    def __init__(self, log_dir, x_sample):
+        super().__init__()
+        self.log_dir = log_dir
+        self.file_writer = tf.summary.create_file_writer(log_dir)
+        self.x_sample = x_sample  
+
+    def on_epoch_end(self, epoch, logs=None):
+        ti = self.x_sample
+        for layer in self.model.conv_layers:
+            ti = layer(ti )
+            if isinstance(layer, SpikingConv2D):
+                with self.file_writer.as_default():
+                    tf.summary.histogram(f"{layer.name}_spikes", ti, step=epoch)
+        
+        ti = self.model.flatten(ti)
+        for layer in self.model.dense_layers:
+            ti = layer(ti)
+            if isinstance(layer, SpikingDense):
+                with self.file_writer.as_default():
+                    tf.summary.histogram(f"{layer.name}_spikes", ti, step=epoch)
+        
+        out = self.model.output_layer(ti)
+        with self.file_writer.as_default():
+            tf.summary.histogram(f"{self.model.output_layer.name}_spikes", out, step=epoch)
+
+
+class SaveWeightsEveryNEpochs(Callback):
+    def __init__(self, save_path, n=10):
+        super().__init__()
+        self.save_path = save_path
+        self.n = n
+        os.makedirs(save_path, exist_ok=True)
+
+    def on_epoch_end(self, epoch, logs=None):
+        if (epoch + 1) % self.n == 0:
+            filename = os.path.join(self.save_path, f'weights_epoch_{epoch + 1}.h5')
+            # self.model.save_weights(filename)
+            print(f"\n[INFO] Saved weights at epoch {epoch + 1} → {filename}")
 
     
 start_time = time.time()
@@ -166,13 +401,38 @@ if args.testing:
     plt.savefig("sample_predictions_relu.png", dpi=150)
     plt.show()
 logging.info("#### Training ####")
-history=model.fit(
+save_cb = SaveWeightsEveryNEpochs("weights/", n=5)
+checkpoint_cb = ModelCheckpoint(
+            "weights/best_model",
+            save_best_only=True,
+            monitor="val_loss",
+            save_weights_only=True
+        )
+
+log_dir = os.path.join(
+    "logs", args.model_name,
+    datetime.now().strftime("%Y%m%d-%H%M%S"))
+
+tensorboard_cb = TensorBoard(log_dir=log_dir, histogram_freq=1,  )
+
+full_eval_cb = FullSpikeEvaluationCallback(
+        log_dir=log_dir,
+        x_sample=data.x_train[:32],
+        data_x_test=data.x_test,
+        data_y_test=data.y_test,
+        batch_size=args.batch_size,
+        run_every_n_epochs=1)        
+
+history = model.fit(
     data.x_train, data.y_train,
     batch_size=args.batch_size,
     epochs=args.epochs,
     verbose=1,
-    validation_data=(data.x_test, data.y_test)
+    validation_data=(data.x_test, data.y_test),
+    callbacks=[tensorboard_cb, save_cb, checkpoint_cb, full_eval_cb]
     )
+
+
 
 if args.testing and args.epochs > 0:
     # Obtain accuracy of the fine-tuned SNN model.
