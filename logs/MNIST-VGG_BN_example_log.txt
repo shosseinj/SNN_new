@@ -1,0 +1,4 @@
+INFO:root:#### Creating the model ####
+INFO:root:#### Loading weights ####
+INFO:root:Loading ReLU weights
+DEBUG:h5py._conv:Creating converter from 3 to 5

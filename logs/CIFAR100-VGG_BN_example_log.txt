@@ -1,0 +1,12 @@
+INFO:root:#### Creating the model ####
+INFO:root:#### Loading weights ####
+INFO:root:Loading ReLU weights
+DEBUG:h5py._conv:Creating converter from 3 to 5
+INFO:root:fuse (imaginary) BN layers
+INFO:root:None
+DEBUG:h5py._conv:Creating converter from 5 to 3
+INFO:root:saved preprocessed ReLU model
+INFO:root:calculating maximum layer output...
+INFO:root:X_n: [7.8858304, 63.582394, 24.58368, 31.7619, 16.384876, 16.316263, 27.52763, 13.47238, 11.8315525, 11.89631, 8.669366, 7.1009965, 9.097437, 5.186145, 26.695662]
+INFO:root:saved maximum layer output
+INFO:root:#### Training ####

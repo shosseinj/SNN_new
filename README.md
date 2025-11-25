@@ -84,3 +84,9 @@ python main.py --model_type=SNN --lr=1e-6 --model_name=VGG_BN_example --data_nam
 ```
 python evaluate_model.py --model_type SNN --model_name VGG_BN_example --data_name CIFAR10 --load True
 ```
+
+### Preprocessing
+
+```
+python main.py --model_type=ReLU --model_name=VGG_BN_example --data_name=CIFAR100 --load=cifar100vgg.h5  --epochs=0 --preprocessing=True
+```

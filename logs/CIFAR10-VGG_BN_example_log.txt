@@ -1,7 +1,12 @@
 INFO:root:#### Creating the model ####
 INFO:root:#### Loading weights ####
-INFO:root:#### X_n pkl loaded... ####
-INFO:root:#### Loading Weights... ####
+INFO:root:Loading ReLU weights
 DEBUG:h5py._conv:Creating converter from 3 to 5
-INFO:root:#### Setting SNN intervals ####
+INFO:root:fuse (imaginary) BN layers
+INFO:root:None
+DEBUG:h5py._conv:Creating converter from 5 to 3
+INFO:root:saved preprocessed ReLU model
+INFO:root:calculating maximum layer output...
+INFO:root:X_n: [7.0667043, 79.92473, 39.833855, 22.54216, 10.999678, 10.474723, 10.878004, 9.353506, 8.011899, 8.972359, 6.7818623, 3.7307265, 4.0385866, 3.6462033, 13.129136]
+INFO:root:saved maximum layer output
 INFO:root:#### Training ####
