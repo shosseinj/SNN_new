@@ -1,92 +1,30 @@
-# High-performance deep spiking neural networks with 0.3 spikes per neuron
+# TTFS SNN Baseline and Experimental Extensions
 
-This repository contains code material for the publication: Stanojevic, A., Woźniak, S., Bellec, G., Cherubini, G., Pantazi, A., &amp; Gerstner, W., High-performance deep spiking neural networks with 0.3 spikes per neuron,
-Nature Communications 15, 6793 (2024). https://www.nature.com/articles/s41467-024-51110-5
+This repository is a working copy of the code released with **“High-performance deep spiking neural networks with 0.3 spikes per neuron”** by Stanojevic et al., *Nature Communications* (2024), together with local experiment and evaluation material.
 
-Deep spiking neural networks (SNNs) offer the promise of low-power artificial intelligence. However, training deep spiking neural networks (SNNs) with backpropagation has been harder than with artificial neural networks (ANNs), which is puzzling given that recent theoretical results provide exact mapping algorithms from ReLU to time-to-first-spike (TTFS) SNNs. After identifying the issue of vanishing-and-exploding gradient we derive a generic solution for the network initialization and SNN parameterization which enables that the an energy-efficient SNN can be trained as robustly as its ANN counterpart. The SNN training is coded in Python and Tensorflow.
+## Purpose
 
-## Usage
+I used this codebase as a research baseline for studying time-to-first-spike neural networks, ANN-to-SNN mapping, gradient behavior, and evaluation before moving to dedicated ConvNeXt-based spiking experiments.
 
-This repository contains code which trains single-spike TTFS neural networks for different benchmark datasets such that they achieve same performance as corresponding ReLU networks.
+## Contents
 
-To use the code please create an anaconda environment using the configuration file (on Linux platform):
+The repository includes:
 
-```console
-foo@bar:~$ conda env create -f environment.yml
-```
+- dataset and preprocessing utilities;
+- SNN/ReLU training code;
+- model definitions;
+- evaluation scripts;
+- confusion-matrix outputs and experiment logs;
+- local reports and supporting papers.
 
-Please consult the comments in the source code of `main.py` for the usage options.
+## Upstream Attribution
 
-## Examples
+The original architecture, method, and released baseline are from Stanojevic et al. The corresponding publication is:
 
-Below are a few selected examples of various scenarios for quick verification using 1 epoch only (and execution time on a GPU).
+> Stanojevic, A., Woźniak, S., Bellec, G., Cherubini, G., Pantazi, A., & Gerstner, W. “High-performance deep spiking neural networks with 0.3 spikes per neuron.” *Nature Communications* 15, 6793 (2024).
 
-### Training from scratch: SNN on MNIST
+This repository is presented as an experimental working copy and not as my original implementation of the published method.
 
-Training SNN FC2 on MNIST from scratch (~21 s):
+## Related Work
 
-```
-python main.py --model_type=SNN --model_name=FC2_example_train --data_name=MNIST --epochs=1
-```
-
-Training SNN VGG16 on MNIST from scratch (~19 min)
-
-```
-python main.py --model_type=SNN --model_name=VGG_example_train --data_name=MNIST --epochs=1
-```
-
-### Fine-tuning: SNN fine-tuning from mapped ReLU trained on MNIST
-
-Training ReLU FC2 on MNIST from scratch and saving (~16 s):
-
-```
-python main.py --model_type=ReLU --model_name=FC2_example --data_name=MNIST --save=True --epochs=1
-```
-
-Fine-tuning SNN FC2 on MNIST (~21 s):
-
-```
-python main.py --model_type=SNN --model_name=FC2_example --data_name=MNIST --load=True --epochs=1
-```
-
-### Fine-tuning: SNN fine-tuning from ReLU pretrained on CIFAR10
-
-Download VGG16 CIFAR10 pretrained weights `cifar10vgg.h5` from [https://github.com/geifmany/cifar-vgg](https://github.com/geifmany/cifar-vgg) to your `logging_dir` location (`./logs/` by deafult)
-
-## Feedback
-
-If you have feedback or want to contribute to the code base, please feel free to open Issues or Pull Requests via Git directly.
-
-## Prompt
-
-### Creating pkl and preprocessed weights
-
-Test pretrained ReLU VGG16 and preprocess the model for mapping to SNN (~3 min):
-
-```
-python main.py --model_type=ReLU --model_name=VGG_BN_example --data_name=CIFAR10 --load=cifar10vgg.h5 --save=True --epochs=0
-```
-
-### Training SNN with Relu weights
-
-Fine-tune SNN VGG16 on CIFAR10 (~12 min):
-
-```
-python main.py --model_type=SNN --lr=1e-6 --model_name=VGG_BN_example --data_name=CIFAR10 --load=True
-```
-
-```
- python main.py --model_type SNN --model_name VGG_BN_example --data_name CIFAR10 --load True --epochs 15
-```
-
-### Testing
-
-```
-python evaluate_model.py --model_type SNN --model_name VGG_BN_example --data_name CIFAR10 --load True
-```
-
-### Preprocessing
-
-```
-python main.py --model_type=ReLU --model_name=VGG_BN_example --data_name=CIFAR100 --load=cifar100vgg.h5  --epochs=0 --preprocessing=True
-```
+More recent experiments that focus on my ConvNeXt-based spiking/TTFS research are maintained separately in `SpikingConvNeXt`, `SNN-only-Convnext`, and `ConvNeXt`.
