@@ -28,3 +28,20 @@ This repository is presented as an experimental working copy and not as my origi
 ## Related Work
 
 More recent experiments that focus on my ConvNeXt-based spiking/TTFS research are maintained separately in `SpikingConvNeXt`, `SNN-only-Convnext`, and `ConvNeXt`.
+
+
+## Installation
+
+The upstream-style environment is recorded in `environment.yml`. Create it with Conda, activate the environment name declared in that file, and inspect the CLI before starting a run:
+
+```bash
+conda env create -f environment.yml
+conda activate tf24
+python main.py --help
+```
+
+If the environment name differs in the YAML file, use that name instead. `requirements.txt` provides an alternative package list but does not replace the CUDA and TensorFlow compatibility checks required for GPU execution.
+
+## Working with the Repository
+
+Use `main.py` for SNN/ReLU training and `evaluate_model.py` for evaluation. Keep datasets, mapped weights, logs, and the exact CLI arguments together when comparing runs. The checked-in reports and figures are historical experiment material and should not be treated as results from a fresh environment.
